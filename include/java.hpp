@@ -8,6 +8,7 @@
 #include <classes/string.hpp>
 #include <classes/klass.hpp>
 #include <classes/method.hpp>
+#include <classes/mirror.hpp>
 #include <classes/frame.hpp>
 
 class JavaInterop

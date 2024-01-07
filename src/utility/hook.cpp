@@ -93,7 +93,7 @@ namespace hook
         __cpuid(cpu_info, 1);
 
         bool fxsave_support = cpu_info[2] & BITS_FXSAVE;
-        bool osxsave_support = cpu_info[2] & BITS_OSXSAVE;
+        bool osxsave_support = 0;//cpu_info[2] & BITS_OSXSAVE;
 
         if (osxsave_support) {
             unsigned long long xcr_feature_mask = _xgetbv(_XCR_XFEATURE_ENABLED_MASK);
@@ -115,26 +115,49 @@ namespace hook
     }
 
     void* alloc_xsave_state(uint64_t xsave_support_level, size_t xsave_state_len) {
-        const size_t xsave_state_align = (xsave_support_level == XSAVE_SUPPORTED ? XSAVE_ALIGNMENT : FXSAVE_ALIGNMENT);
-        void* xsave_state_buf = (xsave_support_level != XSAVE_NOT_SUPPORTED ? _aligned_malloc(xsave_state_len, xsave_state_align) : nullptr);
+	    const size_t xsave_state_align = (xsave_support_level == XSAVE_SUPPORTED ? XSAVE_ALIGNMENT : FXSAVE_ALIGNMENT);
+	    void* xsave_state_buf = (xsave_support_level != XSAVE_NOT_SUPPORTED ? _aligned_malloc(xsave_state_len, xsave_state_align) : nullptr);
 
-        /* Zero out the FPU state buffer */
-        if (xsave_state_buf != nullptr)
-            memset(xsave_state_buf, 0, xsave_state_len);
+	    /* Zero out the FPU state buffer */
+	    if (xsave_state_buf != nullptr)
+	    	memset(xsave_state_buf, 0, xsave_state_len);
 
-        return xsave_state_buf;
+	    return xsave_state_buf;
     }
+
+    __declspec(noinline) void run_xsave_callback(size_t SupportLevel, size_t SizeRequired, size_t IsRestoring) {
+	    if (SupportLevel == XSAVE_NOT_SUPPORTED)
+	    	return;
+
+	    thread_local std::unordered_map<void*, void*> xsave_state_bufs { };
+
+	    auto hooked_xsave_buf = xsave_state_bufs.find(_ReturnAddress());
+
+	    if (hooked_xsave_buf == xsave_state_bufs.end())
+	    	hooked_xsave_buf = xsave_state_bufs.emplace(_ReturnAddress(), alloc_xsave_state(SupportLevel, SizeRequired)).first;
+
+	    void* xsave_state_buf = hooked_xsave_buf->second;
+
+	    if (SupportLevel == XSAVE_SUPPORTED) {
+	    	(IsRestoring ? _xrstor64(xsave_state_buf, -1) : _xsave64(xsave_state_buf, -1));
+	    } else if (SupportLevel == XSAVE_LEGACY_SSE_ONLY) {
+	    	(IsRestoring ? _fxrstor64(xsave_state_buf) : _fxsave64(xsave_state_buf));
+	    }
+    } 
+
+
+
+
     
-    void init_shell_args(PVOID callback, PVOID trampoline) {
-        /* Get the FXSAVE/XSAVE support level */
-        const uint64_t xsave_support_level = get_xsave_support_level();
-        /* Get the size of the FXSAVE/XSAVE area */
-        const size_t xsave_state_len = get_xsave_state_size(xsave_support_level);
-        /* Allocate an aligned buffer for the preserved FPU state */
-        void* fpu_state_buf = alloc_xsave_state(xsave_support_level, xsave_state_len);
-        /* Set the arguments for the shellcode */
-        jhook_shellcode_setargs(xsave_support_level, fpu_state_buf, callback, trampoline);
-    }
+    __declspec(noinline) void init_shell_args(PVOID callback, PVOID trampoline)
+    {
+    	/* Get the FXSAVE/XSAVE support level */
+    	const uint64_t xsave_support_level = get_xsave_support_level();
+    	/* Get the size of the FXSAVE/XSAVE area */
+    	const size_t xsave_state_len = get_xsave_state_size(xsave_support_level);
+    	/* Set the arguments for the shellcode */
+    	jhook_shellcode_setargs(xsave_support_level, xsave_state_len, run_xsave_callback, callback, trampoline);
+    } 
 
     void suspend_all_threads( )
     {
@@ -321,7 +344,6 @@ namespace hook
         memcpy(trampoline + hookLength, trampolineShell, shell_size);
         original_functions[hook] = trampoline;
         printf("Original: %p\n", original);
-        MessageBoxA(0, "Hooked", "Hooked", 0);
 
         // Overwrite original function with jmp shellcode to the callback
         {

@@ -28,6 +28,12 @@ namespace hook
         uintptr_t rcx;
         uintptr_t rbx;
         uintptr_t rax;
+
+        uintptr_t get_parameter( std::size_t index )
+        {
+            uintptr_t locals = r14;
+            return *( uintptr_t* )( locals - index * 8 );
+        }
     };
     
     extern std::unordered_map<PVOID, PVOID> original_functions;

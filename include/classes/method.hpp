@@ -1,5 +1,6 @@
 #pragma once
 #include <java.hpp>
+#include <Windows.h>
 
 namespace java
 {
@@ -36,5 +37,12 @@ namespace java
         char pad[0x50];
     public:
         InterpreterEntry* i2i_entry;
+
+        char* get_name( char* buffer, int size )
+        {
+            uintptr_t address = (uintptr_t)GetModuleHandleA( "jvm.dll" ) + 0x0C031C0;
+            typedef char* ( __fastcall* get_name_fn )( Method*, char*, int );
+            return ( ( get_name_fn )address )( this, buffer, size );
+        }
     };
 }

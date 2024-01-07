@@ -1,8 +1,8 @@
 ; Pointer[0] = Support level of FXSAVE/XSAVE (0 = None, 1 = FXSAVE, 2 = XSAVE)
-; Pointer[1] = Buffer to be used for saving/restoring FPU state (nullptr if support level is 0)
-; Pointer[2] = Address of callback function
-; Pointer[3] = Address of next hook
-; Pointer[4] = Saved (potentially unaligned) stack pointer after preserving all registers but prior to alignment
+; Pointer[1] = Size of buffer to be used for saving/restoring FPU state (0 if unsupported)
+; Pointer[2] = Callback for saving/restoring FPU state
+; Pointer[3] = Address of callback function
+; Pointer[4] = Address of trampoline to original function
 SHELL_PTR_ELEMS EQU 5
 
 ; Magic value embedded at the end of the naked shell to easily determine its size
@@ -13,10 +13,10 @@ PTR_SIZE EQU SIZEOF QWORD
 
 ; Offset of each embedded argument
 ARG_FPUSAVE_SUPPORT     EQU 0 * PTR_SIZE
-ARG_FPUSAVE_BUFFER      EQU 1 * PTR_SIZE
-ARG_CALLHOOK            EQU 2 * PTR_SIZE
-ARG_CALLORIG            EQU 3 * PTR_SIZE
-ARG_SAVED_RSP           EQU 4 * PTR_SIZE
+ARG_FPUSAVE_BUFSIZE     EQU 1 * PTR_SIZE
+ARG_FPUSAVE_CALLBACK    EQU 2 * PTR_SIZE
+ARG_CALLHOOK            EQU 3 * PTR_SIZE
+ARG_CALLORIG            EQU 4 * PTR_SIZE 
 
 ; Constants used by the preserve_fpu_state macro to determine whether the FPU state should be saved or restored
 FPU_STATE_SAVING EQU 0
@@ -122,34 +122,28 @@ preserve_fpu_state MACRO restoring
     ; Make sure all the labels are local
     Local fpu_preserve_fxsave, fpu_preserve_xsave, fpu_preserve_end
 
-    pushfq
-
     ; Check CPU support for FXSAVE/XSAVE
     cmp qword ptr [args + ARG_FPUSAVE_SUPPORT], 1
+    jl fpu_preserve_end ; 0 = No CPU support for preserving FPU state
 
-    jl fpu_preserve_end ;       0 = No CPU support for preserving FPU state
-    je fpu_preserve_fxsave ;    1 = The CPU supports FXSAVE
-    jg fpu_preserve_xsave ;     2 = The CPU supports XSAVE
+    push rcx
+    push rdx
+    push r8
 
-fpu_preserve_fxsave:
-    IF restoring EQ 1
-		restore_fpu_state_fxsave
-	ELSE
-		save_fpu_state_fxsave
-    ENDIF
+    mov rcx, qword ptr [args + ARG_FPUSAVE_SUPPORT]
+    mov rdx, qword ptr [args + ARG_FPUSAVE_BUFSIZE]
+	mov r8, restoring
 
-	jmp fpu_preserve_end
+    sub rsp, 28h
+    call qword ptr [args + ARG_FPUSAVE_CALLBACK]
+    add rsp, 28h
 
-fpu_preserve_xsave:
-    IF restoring EQ 1
-        restore_fpu_state_xsave
-	ELSE
-        save_fpu_state_xsave
-	ENDIF
+    pop r8
+    pop rdx
+    pop rcx
 
 fpu_preserve_end:
-    popfq
-ENDM
+ENDM 
 
 .CODE
 
@@ -179,8 +173,6 @@ jhook_shellcode_stub PROC
     ; Dynamic array of values used by the shellcode.
 	args QWORD SHELL_PTR_ELEMS DUP(0)
 
-    ; Save FPU state
-    preserve_fpu_state FPU_STATE_SAVING
 
     ; Save all general purpose registers/flags
     save_cpu_state_gpr
@@ -188,49 +180,35 @@ jhook_shellcode_stub PROC
     ; Push the 'skip_original_call' argument for the callback function (default to 0)
     push rax
     mov qword ptr [rsp], 0
-
-    ; Set context pointer with original registers/flags as the first argument to the callback
     mov rcx, rsp
+    pop rax
 
-    ; Save (possibly unaligned) stack pointer
-    mov qword ptr [args + ARG_SAVED_RSP], rsp
-
-    ; Allocate shadow space for spilled registers
-    ; https://github.com/simon-whitehead/assembly-fun/blob/master/windows-x64/README.md#shadow-space
-    sub rsp, 28h
-
-    ; Make sure the stack is 16-byte aligned
-    and rsp, -16
+    ; Save FPU state
+    preserve_fpu_state FPU_STATE_SAVING
 
     ; Invoke callback function
     ; Note that the preserved registers are passed as a context argument and may be freely modified
     ; Any modified registers will be reflected after restoring the CPU state below
+    sub rsp, 28h
     call qword ptr [args + ARG_CALLHOOK]
+    add rsp, 28h
 
-    ; Restore saved (possibly unaligned) stack pointer
-    mov rsp, qword ptr [args + ARG_SAVED_RSP]
-
-    ; Restore set_original_call argument
-    pop qword ptr [args + ARG_CALLORIG]
-    
-    ; Restore all general purpose registers/flags
-    restore_cpu_state_gpr
-
-    ; Adjust for the additional skip_original_call argument
-    add rsp, PTR_SIZE
-
-    ; Restore FPU statez
-    preserve_fpu_state FPU_STATE_RESTORING
+    ; Adjust for the additional skip_original_call argument and check if it was set
+    cmp qword ptr [rsp - 8], 1
 
     ; Check if skip_original_call was set by the callback to determine where to go next
-    cmp qword ptr [rsp - PTR_SIZE], 1
     je skip_original_call
 
     ; Branch back to the original function (skip_original_call == 0)
+invoke_original_call:
+    preserve_fpu_state FPU_STATE_RESTORING
+    restore_cpu_state_gpr
     jmp qword ptr [args + ARG_CALLORIG]
     
     ; Skip branching back to the original call trampoline (skip_original_call == 1)
 skip_original_call:
+    preserve_fpu_state FPU_STATE_RESTORING
+    restore_cpu_state_gpr
     ret
 
 end_shellcode:
