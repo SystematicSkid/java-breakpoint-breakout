@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <iostream>
 
+std::unique_ptr<JavaInterop> java_interop;
+
 JavaInterop::JavaInterop( )
 {
     jint vm_count = 0;
@@ -63,6 +65,18 @@ jmethodID JavaInterop::find_static_method( jclass clazz, const char* name, const
         throw std::runtime_error( "Failed to find static method" );
 
     return method;
+}
+
+jfieldID JavaInterop::find_field( jclass clazz, const char* name, const char* sig )
+{
+    /* Find field */
+    jfieldID field = env->GetFieldID( clazz, name, sig );
+
+    /* Check error */
+    if( !field )
+        throw std::runtime_error( "Failed to find field" );
+
+    return field;
 }
 
 java::InstanceKlass* JavaInterop::get_instance_class( jclass clazz )

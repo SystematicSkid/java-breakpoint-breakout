@@ -4,6 +4,9 @@
 #include <string>
 #include <cstdint>
 
+/* Macros */
+#include <utility/java_macros.hpp>
+
 /* Classes */
 #include <classes/string.hpp>
 #include <classes/klass.hpp>
@@ -23,6 +26,9 @@ public:
     jclass find_class( const char* name );
     jmethodID find_method( jclass clazz, const char* name, const char* sig );
     jmethodID find_static_method( jclass clazz, const char* name, const char* sig );
+    jfieldID find_field( jclass clazz, const char* name, const char* sig );
 
     java::InstanceKlass* get_instance_class( jclass klasas );
 };
+
+extern std::unique_ptr<JavaInterop> java_interop;

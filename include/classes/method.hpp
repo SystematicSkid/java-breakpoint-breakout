@@ -31,6 +31,94 @@ namespace java
         }
     };
 
+    class ConstMethod
+    {
+    private:
+        enum class ConstMethodFlags : uint32_t
+        {
+            has_linenumber_table      = 1 << 0,
+            has_checked_exceptions    = 1 << 1,
+            has_localvariable_table   = 1 << 2,
+            has_exception_table       = 1 << 3,
+            has_generic_signature     = 1 << 4,
+            has_method_parameters     = 1 << 5,
+            is_overpass               = 1 << 6,
+            has_method_annotations    = 1 << 7,
+            has_parameter_annotations = 1 << 8,
+            has_type_annotations      = 1 << 9,
+            has_default_annotations   = 1 << 10,
+            caller_sensitive          = 1 << 11,
+            is_hidden                 = 1 << 12,
+            has_injected_profile      = 1 << 13,
+            intrinsic_candidate       = 1 << 14,
+            reserved_stack_access     = 1 << 15,
+            is_scoped                 = 1 << 16,
+            changes_current_thread    = 1 << 17,
+            jvmti_mount_transition    = 1 << 18,
+            deprecated                = 1 << 19,
+            deprecated_for_removal    = 1 << 20
+        };
+    private:
+        uint64_t fingerprint;
+        void* constant_pool;
+        void* stackmap_data;
+        int const_method_size;
+        uint32_t flags;
+
+        uintptr_t end( )
+        {
+            return (uintptr_t)this + this->const_method_size * sizeof( uintptr_t );
+        }
+
+        bool has_method_annotations( )
+        {
+            return ( this->flags & (uint32_t)ConstMethodFlags::has_method_annotations ) != 0;
+        }
+
+        bool has_parameter_annotations( )
+        {
+            return ( this->flags & (uint32_t)ConstMethodFlags::has_parameter_annotations ) != 0;
+        }
+
+        bool has_type_annotations( )
+        {
+            return ( this->flags & (uint32_t)ConstMethodFlags::has_type_annotations ) != 0;
+        }
+
+        bool has_default_annotations( )
+        {
+            return ( this->flags & (uint32_t)ConstMethodFlags::has_default_annotations ) != 0;
+        }
+
+        uint16_t* method_parameters_length_addr( )
+        {
+            int offset = 0;
+            if( has_method_annotations( ) )
+                offset++;
+            if( has_parameter_annotations( ) )
+                offset++;
+            if( has_type_annotations( ) )
+                offset++;
+            if( has_default_annotations( ) )
+                offset++;
+            return (uint16_t*)( end() - offset ) - 1;
+        }
+
+    public:
+        bool has_method_parameters( )
+        {
+            return ( this->flags & (uint32_t)ConstMethodFlags::has_method_parameters ) != 0;
+        }
+
+        int get_method_parameters_length( )
+        {
+            uint16_t* addr = method_parameters_length_addr();
+            if( !addr )
+                return -1;
+            return *addr;
+        }
+    };
+
     class Method
     {
     private:
@@ -43,6 +131,16 @@ namespace java
             uintptr_t address = (uintptr_t)GetModuleHandleA( "jvm.dll" ) + 0x0C031C0;
             typedef char* ( __fastcall* get_name_fn )( Method*, char*, int );
             return ( ( get_name_fn )address )( this, buffer, size );
+        }
+
+        int get_num_arguments( )
+        {
+            return get_const_method( )->get_method_parameters_length( );
+        }
+
+        ConstMethod* get_const_method( )
+        {
+            return *( ConstMethod** )( (uintptr_t)this + 0x10 );
         }
     };
 }
