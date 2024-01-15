@@ -1,7 +1,6 @@
 #pragma once
 #include <java.hpp>
 #include <Windows.h>
-
 namespace java
 {
     class InterpreterEntry
@@ -116,6 +115,13 @@ namespace java
             if( !addr )
                 return -1;
             return *addr;
+        }
+
+        static size_t bytecode_start_offset;
+
+        uint8_t* get_bytecode_start( )
+        {
+            return (uint8_t*)((uintptr_t)this + bytecode_start_offset);
         }
     };
 

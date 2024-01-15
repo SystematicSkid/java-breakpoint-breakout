@@ -7,6 +7,9 @@ set( CMAKE_CXX_STANDARD_REQUIRED ON )
 # Enable MASM
 enable_language( ASM_MASM )
 
+# Disable warning 'C4477'
+add_compile_options( "/wd4477" )
+
 # Ensure MASM compiler is available
 if( NOT CMAKE_ASM_MASM_COMPILER )
     message( FATAL_ERROR "MASM compiler not found" )

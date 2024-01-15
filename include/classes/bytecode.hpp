@@ -234,7 +234,7 @@ namespace java
             bytecode_offsets[ bytecode_start ] = address - bytecode_start;
         }
 
-        Bytecodes get_opcode( ) const { return *( Bytecodes* )( opcode ); }
+        Bytecodes get_opcode( ) const;
 
         static Bytecode* from_opcode( Bytecodes opcode );
 

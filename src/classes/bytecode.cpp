@@ -1,8 +1,24 @@
 #include <classes/bytecode.hpp>
 #include <breakpoints/bytecode_info.hpp>
+#include <breakpoints/breakpoints.hpp>
 
 namespace java
 {
+
+    Bytecodes Bytecode::get_opcode( ) const
+    {
+        /* Check if this opcode is in the original map */
+        if( breakpoints::original_bytecodes.find( (uintptr_t)this->opcode ) != breakpoints::original_bytecodes.end( ) )
+        {
+            /* Return the original opcode */
+            return (Bytecodes)breakpoints::original_bytecodes[ (uintptr_t)this->opcode ];
+        }
+        else
+        {
+            /* Return the current opcode */
+            return (Bytecodes)*this->opcode;
+        }
+    }
 
     int Bytecode::get_length( )
     {
@@ -49,7 +65,7 @@ namespace java
             }
             default:
             {
-                return breakpoints::bytecode_lengths[ *this->opcode ] + 1;
+                return breakpoints::bytecode_lengths[ (uint8_t)this->get_opcode( ) ] + 1;
             }
         }
         // Should never happen
@@ -58,7 +74,7 @@ namespace java
 
     int Bytecode::get_stack_consumption( )
     {
-        return breakpoints::bytecode_operand_consumption[ *this->opcode ];
+        return breakpoints::bytecode_operand_consumption[ (uint8_t)this->get_opcode( ) ];
     }
 }
 

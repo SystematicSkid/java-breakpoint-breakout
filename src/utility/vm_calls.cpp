@@ -2,6 +2,11 @@
 #include <hde/hde64.hpp>
 #include <algorithm>
 #include <string>
+#include <java.hpp>
+
+size_t java::ConstMethod::bytecode_start_offset = 0x0;
+size_t java::JavaThread::preserved_fp_offset = 0x0;
+size_t java::JavaThread::preserved_sp_offset = 0x0;
 
 namespace vm_call
 {
@@ -116,17 +121,17 @@ namespace vm_call
         if( vm_call_addr && !thread_frame_offset )
         {
             uintptr_t preserve_frame_mov = vm_call_addr + 3;
-            printf("Preserve frame mov: %p\n", preserve_frame_mov);
             /*
                 49:89AF F0030000         | mov qword ptr ds:[r15+3F0],rbp
             */
             thread_frame_offset = *(uint32_t*)(preserve_frame_mov + 3);
+            java::JavaThread::preserved_fp_offset = thread_frame_offset;
             uintptr_t operand_stack_mov = preserve_frame_mov + 7;
-            printf("Operand stack mov: %p\n", operand_stack_mov);
             /*
                 49:8987 E0030000         | mov qword ptr ds:[r15+3E0],rax
             */
             thread_operand_stack_offset = *(uint32_t*)(operand_stack_mov + 3);
+            java::JavaThread::preserved_sp_offset = thread_operand_stack_offset;
         }
 
         while (vm_call_addr)
@@ -172,6 +177,8 @@ namespace vm_call
             return 0;
 
         uintptr_t bytecode_offset = fixed_frame_entry_addr + 0x10;
-        return *(uint8_t*)(bytecode_offset + 3);
+        size_t bytecode_start_offset = *(uint8_t*)(bytecode_offset + 3);
+        java::ConstMethod::bytecode_start_offset = bytecode_start_offset;
+        return bytecode_start_offset;
     }
 }

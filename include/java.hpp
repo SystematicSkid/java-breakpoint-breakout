@@ -14,6 +14,7 @@
 #include <classes/method.hpp>
 #include <classes/mirror.hpp>
 #include <classes/frame.hpp>
+#include <classes/thread.hpp>
 
 class JavaInterop
 {

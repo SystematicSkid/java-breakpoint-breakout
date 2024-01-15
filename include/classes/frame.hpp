@@ -25,17 +25,17 @@ namespace java
         
         void debug_print( )
         {
-            printf( "Frame: %p\n", this );
-            printf( "\tInitial SP: %p\n", initial_sp );
-            printf( "\tBCP: %p\n", bcp );
-            printf( "\tCache: %p\n", cache );
-            printf( "\tMDP: %p\n", mdp );
-            printf( "\tMirror: %p\n", mirror );
-            printf( "\tMethod: %p\n", method );
-            printf( "\tLast SP: %p\n", last_sp );
-            printf( "\tSender SP: %p\n", sender_sp );
-            printf( "\tLink: %p\n", link );
-            printf( "\tReturn Address: %p\n", return_address );
+            printf( "Frame: %llx\n", this );
+            printf( "\tInitial SP: %llx\n", initial_sp );
+            printf( "\tBCP: %llx\n", bcp );
+            printf( "\tCache: %llx\n", cache );
+            printf( "\tMDP: %llx\n", mdp );
+            printf( "\tMirror: %llx\n", mirror );
+            printf( "\tMethod: %llx\n", method );
+            printf( "\tLast SP: %llx\n", last_sp );
+            printf( "\tSender SP: %llx\n", sender_sp );
+            printf( "\tLink: %llx\n", link );
+            printf( "\tReturn Address: %llx\n", return_address );
         }
 
     };
