@@ -58,17 +58,17 @@ namespace java
             deprecated                = 1 << 19,
             deprecated_for_removal    = 1 << 20
         };
+    public:
+        uintptr_t end( )
+        {
+            return (uintptr_t)this + this->const_method_size * sizeof( uintptr_t );
+        }
     private:
         uint64_t fingerprint;
         void* constant_pool;
         void* stackmap_data;
         int const_method_size;
         uint32_t flags;
-
-        uintptr_t end( )
-        {
-            return (uintptr_t)this + this->const_method_size * sizeof( uintptr_t );
-        }
 
         bool has_method_annotations( )
         {

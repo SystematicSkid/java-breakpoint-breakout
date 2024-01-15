@@ -357,6 +357,47 @@ namespace hook
         return true;
     }
 
+    bool hook_normal( PVOID original, PVOID hook )
+    {
+        std::size_t length = get_minimum_shell_size(original);
+        if(length < shell_size)
+        {
+            printf("Failed to hook function: %p", original);
+            return false;
+        }
+
+        // Copy original bytes
+        auto original_bytes = std::make_unique<std::uint8_t[]>(length);
+        memcpy(original_bytes.get(), reinterpret_cast<PVOID>(original), length);
+        hook_map[original] = original_bytes.get();
+
+        // Create jmp shellcode to the callback function
+        std::uint8_t callbackShell[shell_size];
+        construct_shell(callbackShell, hook);
+
+        // Allocate memory for the trampoline and copy the original bytes
+        size_t hookLength = static_cast<size_t>(length);
+        std::uint8_t* trampoline = reinterpret_cast<std::uint8_t*>(create_trampoline(original, hookLength));
+
+        // Create jmp shellcode back to the original function after the hook
+        std::uint8_t trampolineShell[shell_size];
+        DWORD64 trampolineAddress = (uintptr_t)original + hookLength;
+        construct_shell(trampolineShell, (PVOID)trampolineAddress);
+
+        // Insert jmp shellcode into trampoline
+        memcpy(trampoline + hookLength, trampolineShell, shell_size);
+        original_functions[hook] = trampoline;
+
+        // Overwrite original function with jmp shellcode to the callback
+        /* Switched to the RAII wrapper just to simplify things */
+        {
+            ScopedVirtualProtect vp_orig(original, shell_size, PAGE_EXECUTE_READWRITE);
+            memcpy(original, callbackShell, shell_size);
+        }
+
+        return true;
+    }
+
     bool unhook( PVOID original )
     {
         /* Get the original bytes */

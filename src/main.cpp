@@ -1,9 +1,12 @@
 #include <iostream>
+#include <intrin.h>
 #include <Windows.h>
 #include <jni.h>
-
+#include <utility/vm_calls.hpp>
 #include <utility/hook.hpp>
 #include <java.hpp>
+#include <breakpoints/breakpoints.hpp>
+
 #include <tuple>
 #include <functional>
 #include <array>
@@ -117,6 +120,54 @@ void callback_handler( hook::hook_context* context )
     }
 }
 
+std::map<uintptr_t, uint8_t> original_bytecodes;
+
+void* original_get_original_bytecode_at = nullptr;
+
+/* static Bytecodes::Code get_original_bytecode_at(JavaThread* current, Method* method, address bcp); */
+uint8_t callback_get_original_bytecode_at( void* current_thread, java::Method* method, uintptr_t bcp )
+{
+    /* Check if our map contains bcp */
+    auto it = original_bytecodes.find( bcp );
+    if( it != original_bytecodes.end( ) )
+    {
+        /* Return original bytecode */
+        return it->second;
+    }
+    printf("Non-intercepted breakpoint\n");
+    return 0;
+}
+
+void* original_breakpoint = nullptr;
+
+/* static void _breakpoint(JavaThread* current, Method* method, address bcp); */
+void callback_breakpoint( void* current_thread, java::Method* method, uintptr_t bcp )
+{
+    printf( "[callback_breakpoint]\n" );
+    printf( "\tCurrent: %p\n", current_thread );
+    printf( "\tMethod: %p\n", method );
+    printf( "\tBCP: %p\n", bcp );
+    uint32_t operand_stack_offset = vm_call::thread_operand_stack_offset;
+    printf( "\tOperand stack offset: %p\n", operand_stack_offset );
+    uintptr_t* operand_stack = *(uintptr_t**)( (uintptr_t)current_thread + operand_stack_offset );
+    uint8_t original_bytecode = original_bytecodes[bcp];
+    uint8_t stack_consumption = breakpoints::bytecode_operand_consumption[original_bytecode];
+    printf( "\tOriginal bytecode: %02X\n", original_bytecode );
+    printf( "\tStack consumption: %d\n", stack_consumption );
+
+    printf("Operand 0: %p\n", operand_stack[0]);
+
+    MessageBoxA( NULL, "Breakpoint hit", "Breakpoint", MB_OK );
+}
+
+void set_breakpoint( uint8_t* bytecode, int offset )
+{
+    printf( "Setting breakpoint at offset %d\n", offset );
+    printf( "\tBytecode: %02X\n", bytecode[offset] );
+    original_bytecodes[(uintptr_t)bytecode + offset] = bytecode[offset];
+    bytecode[offset] = 0xCA;
+}
+
 void main_thread( )
 {
     /* Create console */
@@ -155,29 +206,59 @@ void main_thread( )
         main_class = java_interop->get_instance_class( clazz );
 
         /* find 'int test_mba(int, int) */
-        jmethodID test_mba = java_interop->find_static_method( clazz, "test_mba", "(II)I" );
-        jmethodID get_fields = java_interop->find_method( clazz, "get_field1", "()I" );
-        jmethodID main = java_interop->find_static_method( clazz, "main", "([Ljava/lang/String;)V" );
-        main_method = *( java::Method** )main;
-        java::Method* test_mba_method = *( java::Method** )test_mba;
-        java::Method* get_fields_method = *( java::Method** )get_fields;
-        printf("Get fields: %p\n", get_fields_method);
-        method_callback_map[test_mba_method] = callback_test_mba;
-        method_callback_map[get_fields_method] = callback_get_field1;
-        mba_method = test_mba_method;
-        printf( "test_mba: %p\n", test_mba_method );
-        printf("callback_test_mba: %p\n", callback_test_mba);
+        jmethodID test_mba = java_interop->find_static_method( clazz, "fibb", "(I)I" );
+        java::Method* test_mba_method = *(java::Method**)(test_mba);
+        //method_callback_map[test_mba_method] = callback_test_mba;
+        //method_callback_map[get_fields_method] = callback_get_field1;
+        //mba_method = test_mba_method;
         printf( "Entry: %p\n", test_mba_method->i2i_entry );
+        uint8_t const_method_bytecode_offset = vm_call::find_bytecode_start_offset( test_mba_method->i2i_entry );
+        printf( "Bytecode offset: %02X\n", const_method_bytecode_offset );
         uintptr_t interception_address = test_mba_method->i2i_entry->get_interception_address( );
         printf( "Interception address: %p\n", interception_address );
-        printf("Parameters size: %d\n", get_fields_method->get_const_method()->get_method_parameters_length());
+        printf("Parameters size: %d\n", test_mba_method->get_const_method()->get_method_parameters_length());
+        printf("Const method: %p\n", test_mba_method->get_const_method());
+        printf("Const method end: %p\n", test_mba_method->get_const_method()->end());
 
-        jfieldID field1 = java_interop->find_field( clazz, "field1", "I" );
-        printf( "Field1: %p\n", field1 );
-        jfieldID field2 = java_interop->find_field( clazz, "field2", "I" );
-        printf( "Field2: %p\n", field2 );
+        uintptr_t dispatch_table = *(uintptr_t*)(interception_address + 2);
+        printf("Dispatch table: %p\n", dispatch_table);
+        constexpr uint8_t breakpoint_opcode = 0xCA;
+        uintptr_t breakpoint_method = *(uintptr_t*)(dispatch_table + breakpoint_opcode * 8);
+        printf("Breakpoint method: %p\n", breakpoint_method);
 
-        hook::hook( ( PVOID )interception_address, ( PVOID )callback_handler );
+        std::vector<PVOID> vm_calls = vm_call::find_vm_calls( ( PVOID )breakpoint_method );
+        if( vm_calls.size( ) != 2 )
+            throw std::runtime_error( "Failed to find vm calls" );
+        PVOID runtime_get_original_bytecode = vm_calls[0];
+        PVOID runtime_breakpoint_method = vm_calls[1];
+        printf( "Get original bytecode: %p\n", runtime_get_original_bytecode );
+        printf( "Breakpoint method: %p\n", runtime_breakpoint_method );
+
+        
+        int max_bytecode_size = 0x100;
+        uint8_t* bytecode = (uint8_t*)((uintptr_t)test_mba_method->get_const_method() + const_method_bytecode_offset);
+        printf("Bytecode: %p\n", bytecode);
+        for(int i = 0; i < max_bytecode_size; )
+        {
+            uint8_t opcode = bytecode[i];
+            std::unique_ptr<java::Bytecode> bytecode_obj = std::make_unique<java::Bytecode>(bytecode, bytecode + i);
+            if(opcode == 0xFF)
+            {
+                break;
+            }
+            printf("Bytecode %02X: %02X\n", i, opcode);
+            printf("\tOpcode: %02X\n", bytecode_obj->get_opcode());
+            printf("\tLength: %d\n", bytecode_obj->get_length());
+            printf("\tStack consumption: %d\n", bytecode_obj->get_stack_consumption());
+            i += bytecode_obj->get_length();
+        }
+
+        //set_breakpoint( bytecode, 0x2 );
+
+        hook::hook_normal( runtime_get_original_bytecode, ( PVOID )&callback_get_original_bytecode_at );
+        hook::hook_normal( runtime_breakpoint_method, ( PVOID )&callback_breakpoint );
+
+        //hook::hook( ( PVOID )interception_address, ( PVOID )callback_handler );
         /* Wait for INSERT */
         while( !GetAsyncKeyState( VK_INSERT ) )
             Sleep( 100 );

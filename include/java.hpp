@@ -8,6 +8,7 @@
 #include <utility/java_macros.hpp>
 
 /* Classes */
+#include <classes/bytecode.hpp>
 #include <classes/string.hpp>
 #include <classes/klass.hpp>
 #include <classes/method.hpp>

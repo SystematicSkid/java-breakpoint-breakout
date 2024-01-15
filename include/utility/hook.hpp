@@ -57,6 +57,7 @@ namespace hook
     void* create_trampoline( PVOID target, std::size_t& size );
     void* create_naked_shell( PVOID callback, PVOID trampoline );
     bool hook( PVOID original, PVOID hook );
+    bool hook_normal( PVOID original, PVOID hook );
     bool hook_method_code( jmethodID original, PVOID callback );
     bool add_hook( jmethodID original, PVOID callback );
     bool unhook( PVOID original );
