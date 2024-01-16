@@ -22,5 +22,12 @@ namespace java
                 throw std::runtime_error( "JavaThread::preserved_fp_offset is not initialized" );
             return java::Frame::create_frame( *(uintptr_t*)( (uintptr_t)this + preserved_fp_offset ) );
         }
+
+        static JavaThread* current( )
+        {
+            /* Get gs 0x58 */
+            uintptr_t gs58 = *(uintptr_t*)( (uintptr_t)__readgsqword( 0x58 ) + 0x10 );
+            return *(JavaThread**)( gs58 + 0x20 );
+        }
     };
 }

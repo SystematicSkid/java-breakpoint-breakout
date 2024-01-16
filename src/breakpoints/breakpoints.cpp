@@ -39,6 +39,33 @@ namespace breakpoints
         return true;
     }
 
+    bool remove_all_breakpoints( java::Method* method )
+    {
+        /* Get bytecode start */
+        uint8_t* bytecode_start = method->get_const_method( )->get_bytecode_start( );
+        /* Iterate over all bytecodes */
+        for( uint8_t* bytecode_address = bytecode_start; ; bytecode_address++ )
+        {
+            /* Exit case */
+            if(*bytecode_address == 0xFF)
+                break;
+            /* Check if this bytecode is a breakpoint */
+            if( original_bytecodes.find( (uintptr_t)bytecode_address ) != original_bytecodes.end( ) )
+            {
+                /* Read original bytecode */
+                uint8_t bytecode = original_bytecodes[ (uintptr_t)bytecode_address ];
+                /* Remove original bytecode from map */
+                original_bytecodes.erase( (uintptr_t)bytecode_address );
+                /* Remove callback */
+                breakpoint_callbacks.erase( (uintptr_t)bytecode_address );
+                /* Remove breakpoint */
+                *bytecode_address = bytecode;
+            }
+        }
+
+        return true;
+    }
+
     uint8_t original_bytecode_handler( java::JavaThread* java_thread, java::Method* method, uintptr_t bytecode_address )
     {
         /* Try to find original bytecode */
@@ -94,7 +121,6 @@ namespace breakpoints
             return false;
 
         
-        constexpr uint8_t breakpoint_opcode = 0xCA;
         uintptr_t breakpoint_method = *(uintptr_t*)(dispatch_table + breakpoint_opcode * 8);
         if(!breakpoint_method)
             return false;

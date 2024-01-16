@@ -210,7 +210,8 @@ namespace java
         goto_w = 200,
         jsr_w = 201,
         breakpoint = 202,
-        ByteCodeCount = 203
+        ByteCodeCount = 203,
+        invalid = 255
     };
 
     class Bytecode 

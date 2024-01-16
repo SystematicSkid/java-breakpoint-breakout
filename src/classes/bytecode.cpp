@@ -41,10 +41,11 @@ namespace java
                 int position = this->bytecode_offsets[ this->opcode ];
                 int padding = ( 4 - ( position % 4 ) ) % 4;
                 int length = 1  /* opcode */
-                + padding       /* padding */
-                + 4             /* default */
-                + 4             /* npairs */;
-                + 8 * ( *( int32_t* )( this->opcode + 1 + padding + 4 + 4 ) );
+                    + padding       /* padding */
+                    + 4             /* default */
+                    + 4             /* npairs */;
+                int npairs = *( int32_t* )( this->opcode + 1 + padding + 4 + 4 );
+                length += 8 * npairs;
                 return length;
                 break;
             }

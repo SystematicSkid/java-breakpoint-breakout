@@ -17,26 +17,6 @@
 
 HMODULE my_module;
 
-// Global log file pointer and critical section
-FILE* logFile = NULL;
-CRITICAL_SECTION logCriticalSection;
-
-void initializeLogging() {
-    InitializeCriticalSection(&logCriticalSection);
-    logFile = fopen("log.txt", "a"); // Open in append mode
-    if (!logFile) {
-        // Handle error, e.g., exit or print an error message
-    }
-}
-
-void finalizeLogging() {
-    if (logFile) {
-        fclose(logFile);
-        logFile = NULL;
-    }
-    DeleteCriticalSection(&logCriticalSection);
-}
-
 java::Method* main_method = nullptr;
 java::Method* mba_method = nullptr;
 java::InstanceKlass* main_class = nullptr;
@@ -120,30 +100,11 @@ void callback_handler( hook::hook_context* context )
     }
 }
 
-void test_breakpoint_callback( breakpoints::BreakpointInfo* info )
-{
-    printf( "[test_breakpoint_callback]\n" );
-    printf( "\tOpcode: %02X\n", info->get_bytecode( )->get_opcode( ) );
-    int num_operands = info->get_operand_count( );
-    printf( "\tNum operands: %d\n", num_operands );
-    for( int i = 0; i < num_operands; i++ )
-    {
-        uintptr_t* operand = info->get_operand( i );
-        printf( "\tOperand %d: %llx\n", i, *operand );
-    }
-}
-
 void main_thread( )
 {
     /* Create console */
     AllocConsole( );
     freopen( "CONOUT$", "w", stdout );
-
-    /* Delete log.txt */
-    DeleteFileA( "log.txt" );
-
-    /* Initialize logging */
-    initializeLogging();
 
     try
     {
@@ -158,24 +119,63 @@ void main_thread( )
         jclass clazz = java_interop->find_class( "Main" );
         main_class = java_interop->get_instance_class( clazz );
 
-        /* find 'int test_mba(int, int) */
+        /* find 'int simple_add(int, int) */
         jmethodID simple_add = java_interop->find_static_method( clazz, "simple_add", "(II)I" );
         java::Method* simple_add_method = *(java::Method**)(simple_add);
 
-        breakpoints::add_breakpoint( simple_add_method, 3, test_breakpoint_callback );
+        uint8_t* bytecode_start = simple_add_method->get_const_method( )->get_bytecode_start( );
+        std::unique_ptr< java::Bytecode > bytecode = std::make_unique< java::Bytecode >( bytecode_start );
+        int offset = 0;
+        while( bytecode->get_opcode( ) != java::Bytecodes::invalid )
+        {
+            printf( "Opcode %02X: %02X\n", offset, bytecode->get_opcode( ) );
+            int length = bytecode->get_length( );
+            bytecode_start += length;
+            offset += length;
+            bytecode = std::make_unique< java::Bytecode >( bytecode_start );
+        }
 
-        //hook::hook( ( PVOID )interception_address, ( PVOID )callback_handler );
-        /* Wait for INSERT */
-        while( !GetAsyncKeyState( VK_INSERT ) )
+        simple_add_method->set_breakpoint(
+            0x01, /* Offset */
+            [ ]( breakpoints::BreakpointInfo* bp )
+            {
+                printf( "[simple_add breakpoint]\n" );
+                printf( "\tOpcode: %02X\n", bp->get_bytecode( )->get_opcode( ) );
+                int num_operands = bp->get_operand_count( );
+                printf( "\tNum operands: %d\n", num_operands );
+                for( int i = 0; i < num_operands; i++ )
+                {
+                    printf( "\tOperand %d: %d\n", i, *bp->get_operand( i ) );
+                }
+            } 
+        );
+
+        simple_add_method->set_breakpoint(
+            0x02, /* Offset */
+            [ ]( breakpoints::BreakpointInfo* bp )
+            {
+                printf( "[simple_add breakpoint]\n" );
+                printf( "\tOpcode: %02X\n", bp->get_bytecode( )->get_opcode( ) );
+                int num_operands = bp->get_operand_count( );
+                printf( "\tNum operands: %d\n", num_operands );
+                for( int i = 0; i < num_operands; i++ )
+                {
+                    printf( "\tOperand %d: %d\n", i, *bp->get_operand( i ) );
+                }
+            } 
+        );
+
+
+        /* Wait for HOME */
+        while( !GetAsyncKeyState( VK_HOME ) )
             Sleep( 100 );
+        printf( "Removing breakpoints\n" );
+        simple_add_method->remove_all_breakpoints( );
     }
     catch(const std::exception& e)
     {
         std::cerr << e.what() << '\n';
     }
-
-    /* Finalize logging */
-    finalizeLogging();
     
 
     /* Wait for INSERT */

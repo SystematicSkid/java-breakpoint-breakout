@@ -1,6 +1,13 @@
 #pragma once
 #include <java.hpp>
 #include <Windows.h>
+#include <functional>
+
+namespace breakpoints
+{
+    /* Forward definition */
+    typedef std::function<void( class BreakpointInfo* )> breakpoint_callback_t;
+}
 namespace java
 {
     class InterpreterEntry
@@ -148,5 +155,9 @@ namespace java
         {
             return *( ConstMethod** )( (uintptr_t)this + 0x10 );
         }
+
+        void set_breakpoint( int offset, breakpoints::breakpoint_callback_t callback );
+        void remove_breakpoint( int offset );
+        void remove_all_breakpoints( );
     };
 }

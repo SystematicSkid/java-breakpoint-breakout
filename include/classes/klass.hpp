@@ -13,5 +13,7 @@ namespace java
             void* get_internal_name_fn = vtable[ 8 ];
             return ( ( const char* ( * )( InstanceKlass* ) )get_internal_name_fn )( this );
         }
+
+        void dump_class( );
     };
 }
