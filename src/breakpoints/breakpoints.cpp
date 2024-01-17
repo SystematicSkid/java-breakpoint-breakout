@@ -2,6 +2,10 @@
 #include <utility/vm_calls.hpp>
 #include <utility/hook.hpp>
 
+extern "C" {
+    uintptr_t __forceinline jhook_get_r14_address( );
+}
+
 namespace breakpoints
 {
     std::map< uintptr_t, uint8_t > original_bytecodes;
@@ -75,18 +79,30 @@ namespace breakpoints
         return original_bytecode;
     }
 
-    void breakpoint_handler( java::JavaThread* java_thread, java::Method* method, uintptr_t bytecode_address )
+    _declspec( noinline )
+    void breakpoint_handler( java::JavaThread* java_thread, java::Method* method, uintptr_t bytecode_address, uintptr_t parameters )
     {
         /* Try to find breakpoint callback */
         breakpoint_callback_t callback = breakpoint_callbacks[ bytecode_address ];
         if(!callback)
             return;
         /* Create breakpoint info */
-        BreakpointInfo* breakpoint_info = new BreakpointInfo( method, bytecode_address, java_thread );
+        BreakpointInfo* breakpoint_info = new BreakpointInfo( method, bytecode_address, java_thread, parameters );
         /* Call callback */
         callback( breakpoint_info );
         /* Delete breakpoint info */
         delete breakpoint_info;
+    }
+
+    /*
+        This is the callback we use to intercept the real breakpoint handler
+        This is a hacky wrapper around `breakpoint_handler` to prevent the compiler from using r14
+        before we can get it
+    */
+    void breakpoint_callback( java::JavaThread* java_thread, java::Method* method, uintptr_t bytecode_address )
+    {
+        uintptr_t parameters = jhook_get_r14_address( );
+        breakpoint_handler( java_thread, method, bytecode_address, parameters );
     }
 
     bool setup( JavaInterop* interop )
@@ -125,6 +141,8 @@ namespace breakpoints
         if(!breakpoint_method)
             return false;
 
+        printf("Breakpoint method: %p\n", breakpoint_method);
+
         std::vector<PVOID> vm_calls = vm_call::find_vm_calls( ( PVOID )breakpoint_method );
         if( vm_calls.size( ) < 2 )
             return false;
@@ -134,7 +152,7 @@ namespace breakpoints
 
         if( !hook::hook_normal( runtime_get_original_bytecode, ( PVOID )&original_bytecode_handler ) )
             return false;
-        if( !hook::hook_normal( runtime_breakpoint_method, ( PVOID )&breakpoint_handler ) )
+        if( !hook::hook_normal( runtime_breakpoint_method, ( PVOID )&breakpoint_callback ) )
             return false;
 
         return true;

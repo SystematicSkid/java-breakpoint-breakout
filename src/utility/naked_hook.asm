@@ -147,6 +147,12 @@ ENDM
 
 .CODE
 
+; This is a very simple wrapper to obtain the address held in the R14 register.
+jhook_get_r14_address PROC
+    mov rax, r14
+    ret
+jhook_get_r14_address ENDP
+
 ; This is a simple wrapper function to access the magic number marking the end of the shellcode stub.
 jhook_end_shellcode_magic PROC
     mov rax, SHELL_ENDCODE_MAGIC

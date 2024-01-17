@@ -136,7 +136,7 @@ void main_thread( )
         }
 
         simple_add_method->set_breakpoint(
-            0x01, /* Offset */
+            0x00, /* Offset */
             [ ]( breakpoints::BreakpointInfo* bp )
             {
                 printf( "[simple_add breakpoint]\n" );
@@ -147,24 +147,14 @@ void main_thread( )
                 {
                     printf( "\tOperand %d: %d\n", i, *bp->get_operand( i ) );
                 }
+
+                uintptr_t* param1 = bp->get_parameter( 0 );
+                uintptr_t* param2 = bp->get_parameter( 1 );
+
+                printf( "\tParam1: %d\n", *param1 );
+                printf( "\tParam2: %d\n", *param2 );
             } 
         );
-
-        simple_add_method->set_breakpoint(
-            0x02, /* Offset */
-            [ ]( breakpoints::BreakpointInfo* bp )
-            {
-                printf( "[simple_add breakpoint]\n" );
-                printf( "\tOpcode: %02X\n", bp->get_bytecode( )->get_opcode( ) );
-                int num_operands = bp->get_operand_count( );
-                printf( "\tNum operands: %d\n", num_operands );
-                for( int i = 0; i < num_operands; i++ )
-                {
-                    printf( "\tOperand %d: %d\n", i, *bp->get_operand( i ) );
-                }
-            } 
-        );
-
 
         /* Wait for HOME */
         while( !GetAsyncKeyState( VK_HOME ) )
