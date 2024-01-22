@@ -116,14 +116,16 @@ void main_thread( )
             throw std::runtime_error( "Failed to setup breakpoints" );
 
         /* Find class */
-        jclass clazz = java_interop->find_class( "Main" );
-        main_class = java_interop->get_instance_class( clazz );
+        jclass clazz = java_interop->find_class( "dpo" );
+        printf("Class: %p\n", clazz);
 
-        /* find 'int simple_add(int, int) */
-        jmethodID simple_add = java_interop->find_static_method( clazz, "simple_add", "(II)I" );
-        java::Method* simple_add_method = *(java::Method**)(simple_add);
+        /* find 'long seed()' */
+        jmethodID long_method = java_interop->find_method( clazz, "b", "()J" );
+        printf("Method: %p\n", long_method);
+        java::Method* simple_add_method = *(java::Method**)(long_method);
 
         uint8_t* bytecode_start = simple_add_method->get_const_method( )->get_bytecode_start( );
+        printf("Bytecode start: %p\n", bytecode_start);
         std::unique_ptr< java::Bytecode > bytecode = std::make_unique< java::Bytecode >( bytecode_start );
         int offset = 0;
         while( bytecode->get_opcode( ) != java::Bytecodes::invalid )
@@ -136,23 +138,19 @@ void main_thread( )
         }
 
         simple_add_method->set_breakpoint(
-            0x00, /* Offset */
+            0x01, /* Offset */
             [ ]( breakpoints::BreakpointInfo* bp )
             {
-                printf( "[simple_add breakpoint]\n" );
+                printf( "[get_seed breakpoint]\n" );
                 printf( "\tOpcode: %02X\n", bp->get_bytecode( )->get_opcode( ) );
-                int num_operands = bp->get_operand_count( );
-                printf( "\tNum operands: %d\n", num_operands );
-                for( int i = 0; i < num_operands; i++ )
-                {
-                    printf( "\tOperand %d: %d\n", i, *bp->get_operand( i ) );
-                }
-
-                uintptr_t* param1 = bp->get_parameter( 0 );
-                uintptr_t* param2 = bp->get_parameter( 1 );
-
-                printf( "\tParam1: %d\n", *param1 );
-                printf( "\tParam2: %d\n", *param2 );
+                uintptr_t object = *bp->get_operand_unsafe( 0 );
+                printf("\tObject: %p\n", *bp->get_operand_unsafe(0));
+                uint64_t* seed = (uint64_t*)((uintptr_t)object + 0x10);
+                printf("\tSeed: %lld\n", *seed);
+                *seed = 123;
+                printf("Spoofed seed to 123\n");
+                //uintptr_t return_value = *bp->get_operand( 0 );
+                //printf( "\tReturn value: %lld\n", return_value );
             } 
         );
 

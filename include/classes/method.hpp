@@ -153,7 +153,7 @@ namespace java
 
         ConstMethod* get_const_method( )
         {
-            return *( ConstMethod** )( (uintptr_t)this + 0x10 );
+            return *( ConstMethod** )( (uintptr_t)this + 0x8 );
         }
 
         void set_breakpoint( int offset, breakpoints::breakpoint_callback_t callback );

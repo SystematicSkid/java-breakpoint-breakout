@@ -39,14 +39,38 @@ namespace vm_call
     40 F6 C4 0F
     0F 84 ? ? ? ?
     48 83 EC 08                  
-    48 B8 ? ? ? ? ? ? ? ?  
-    FF D0                          
+    48 ? ? ? ? ? ? ? ? ?  
+    FF                          
+    )";
+
+    /*
+    000001CE186ACDC7 | C5F877                   | vzeroupper                                                                                                        |
+    000001CE186ACDCA | 49:89AF A0020000         | mov qword ptr ds:[r15+2A0],rbp                                                                                    |
+    000001CE186ACDD1 | 49:8987 90020000         | mov qword ptr ds:[r15+290],rax                                                                                    |
+    000001CE186ACDD8 | 48:83EC 20               | sub rsp,20                                                                                                        |
+    000001CE186ACDDC | F7C4 0F000000            | test esp,F                                                                                                        |
+    000001CE186ACDE2 | 0F84 1A000000            | je 1CE186ACE02                                                                                                    |
+    000001CE186ACDE8 | 48:83EC 08               | sub rsp,8                                                                                                         |
+    000001CE186ACDEC | 49:BA 6056E291FD7F0000   | mov r10,jvm.7FFD91E25660                                                                                          |
+    000001CE186ACDF6 | 41:FFD2                  | call r10                                                                                                          |
+    000001CE186ACDF9 | 48:83C4 08               | add rsp,8                                                                                                         |
+
+    */
+
+    std::string vm_call_pattern2 = R"(
+    C5 F8 77
+    49 89 AF ? ? ? ?
+    49 89 87 ? ? ? ?
+    48 83 EC 20
+    F7 C4 0F 00 00 00
+    0F 84 ? ? ? ?
+    48 83 EC 08
+    49 ? ? ? ? ? ? ? ? ?
+    41 FF
     )";
 
     std::string vm_call_address_pattern = R"(
-    48 83 EC 08                 
-    48 B8 ? ? ? ? ? ? ? ?   
-    FF D0                           
+    48 83 EC 08                       
     )";
 
     
@@ -116,8 +140,15 @@ namespace vm_call
 
         uintptr_t start_addr = (uintptr_t)start;
         uintptr_t end_addr = start_addr + max_len;
+        char* call_pattern = (char*)vm_call_pattern.c_str();
 
-        uintptr_t vm_call_addr = scan( vm_call_pattern.c_str( ), start_addr, end_addr );
+        uintptr_t vm_call_addr = scan( call_pattern, start_addr, end_addr );
+        if( !vm_call_addr )
+        {
+            call_pattern = (char*)vm_call_pattern2.c_str();
+            vm_call_addr = scan( call_pattern, start_addr, end_addr );
+        }
+        printf("VM Call address: %p\n", vm_call_addr);
         if( vm_call_addr && !thread_frame_offset )
         {
             uintptr_t preserve_frame_mov = vm_call_addr + 3;
@@ -125,12 +156,14 @@ namespace vm_call
                 49:89AF F0030000         | mov qword ptr ds:[r15+3F0],rbp
             */
             thread_frame_offset = *(uint32_t*)(preserve_frame_mov + 3);
+            printf("Thread frame offset: %p\n", thread_frame_offset);
             java::JavaThread::preserved_fp_offset = thread_frame_offset;
             uintptr_t operand_stack_mov = preserve_frame_mov + 7;
             /*
                 49:8987 E0030000         | mov qword ptr ds:[r15+3E0],rax
             */
             thread_operand_stack_offset = *(uint32_t*)(operand_stack_mov + 3);
+            printf("Thread operand stack offset: %p\n", thread_operand_stack_offset);
             java::JavaThread::preserved_sp_offset = thread_operand_stack_offset;
         }
 
@@ -138,7 +171,7 @@ namespace vm_call
         {
             uintptr_t vm_call_address = scan( vm_call_address_pattern.c_str( ), vm_call_addr, vm_call_addr + 0x50 );
             calls.push_back( *( PVOID *)(vm_call_address + 6) );
-            vm_call_addr = scan( vm_call_pattern.c_str( ), vm_call_addr + 1, end_addr );
+            vm_call_addr = scan( call_pattern, vm_call_addr + 1, end_addr );
         }
 
         return calls;
