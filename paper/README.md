@@ -1,3 +1,8 @@
+# Disclaimer
+You are viewing the paper on my git! You can view it on my blog [here](https://systemfailu.re/2024/01/22/java-breakpoint-breakout/)!
+
+I don't particularly care where you view it. I just want you to read it. I hope you enjoy it! (I am also well aware Git's Markdown is probably prettier than my blog's markdown.)
+
 # Introduction
 In my last [post](https://systemfailu.re/2023/12/25/hooking-java-methods-just-in-time/) I discussed how you could apply hooks to Java methods when they are compiled
 by the JIT compiler. One of the obvious requirements of that technique is that the method you want to hook must be compiled by the JIT compiler. I provided
@@ -29,14 +34,14 @@ When running in interpreted mode, a method's entry point will point to a pre-def
 To showcase this, I have added the x86-64 handler for the `iadd` instruction below:
 ```asm
 mov eax,dword ptr ss:[rsp]                |
-add rsp,8                                 |
+add rsp,8                                 | pop eax
 mov edx,dword ptr ss:[rsp]                |
-add rsp,8                                 |
-add eax,edx                               |
-movzx ebx,byte ptr ds:[r13+1]             |
-inc r13                                   |
-mov r10,<jvm.dispatch_table>              |
-jmp qword ptr ds:[r10+rbx*8]              |
+add rsp,8                                 | pop edx
+add eax,edx                               | eax = eax + edx
+movzx ebx,byte ptr ds:[r13+1]             | ebx = next instruction
+inc r13                                   | r13++ ; r13 = bytecode pointer
+mov r10,<jvm.dispatch_table>              | 
+jmp qword ptr ds:[r10+rbx*8]              | jmp [next_instruction_handler]
 ```
 The register allocation in this handler is as follows:
 
@@ -69,73 +74,31 @@ The breakpoint instruction, denoted by the opcode `0xCA`, is a single-byte instr
 2. Executes the breakpoint handler from the JVM runtime
 3. Executes the original instruction and continues normal execution
 
-For your convenience, I have included the x86 assembly for the breakpoint instruction below along with some comments. Keep in mind r15 is used to store the thread and rbp is used to store the current frame:
-```asm
-mov rdx,qword ptr ss:[rbp-18]             |
-call 21AC31ACDB8                          |
-jmp 21AC31ACE53                           |
-mov r8,r13                                |
-lea rax,qword ptr ss:[rsp+8]              |
-mov qword ptr ss:[rbp-40],r13             |
-mov rcx,r15                               |
-vzeroupper                                |
-mov qword ptr ds:[r15+2A0],rbp            | Preserve java frame
-mov qword ptr ds:[r15+290],rax            | Preserve operand stack
-sub rsp,20                                |
-test esp,F                                |
-je 21AC31ACE02                            |
-sub rsp,8                                 |
-mov r10,<jvm.get_original_bytecode>       |
-call r10                                  |
-add rsp,8                                 |
-jmp 21AC31ACE0F                           |
-mov r10,<jvm.get_original_bytecode>       |
-call r10                                  |
-add rsp,20                                |
-mov qword ptr ds:[r15+290],0              |
-mov qword ptr ds:[r15+2A0],0              |
-mov qword ptr ds:[r15+298],0              |
-vzeroupper                                |
-cmp qword ptr ds:[r15+8],0                |
-je 21AC31ACE4A                            |
-jmp 21AC3190F00                           |
-mov r13,qword ptr ss:[rbp-40]             |
-mov r14,qword ptr ss:[rbp-38]             |
-ret                                       |
-mov rbx,rax                               |
-mov rdx,qword ptr ss:[rbp-18]             |
-call 21AC31ACE64                          |
-jmp 21AC31ACEFF                           |
-mov r8,r13                                |
-lea rax,qword ptr ss:[rsp+8]              |
-mov qword ptr ss:[rbp-40],r13             |
-mov rcx,r15                               |
-vzeroupper                                |
-mov qword ptr ds:[r15+2A0],rbp            | Preserve java frame
-mov qword ptr ds:[r15+290],rax            | Preserve operand stack
-sub rsp,20                                |
-test esp,F                                |
-je 21AC31ACEAE                            |
-sub rsp,8                                 |
-mov r10,<jvm.breakpoint_handler>          |
-call r10                                  |
-add rsp,8                                 |
-jmp 21AC31ACEBB                           |
-mov r10,<jvm.breakpoint_handler>          |
-call r10                                  |
-add rsp,20                                |
-mov qword ptr ds:[r15+290],0              |
-mov qword ptr ds:[r15+2A0],0              |
-mov qword ptr ds:[r15+298],0              |
-vzeroupper                                |
-cmp qword ptr ds:[r15+8],0                |
-je 21AC31ACEF6                            |
-jmp 21AC3190F00                           |
-mov r13,qword ptr ss:[rbp-40]             |
-mov r14,qword ptr ss:[rbp-38]             |
-ret                                       |
-mov r10,jvm.7FFD15B13690                  |
-jmp qword ptr ds:[r10+rbx*8]              | Execute original bytecode
+For your convenience, I have included the (incredibly reduced) x86 template for the breakpoint instruction below along with some comments. I originally had the entire (very large) x86 shellcode for this method in here, but I decided it's pretty useless to show that unless you really love assembly. Keep in mind r15 is used to store the thread and rbp is used to store the current frame:
+```cpp
+void TemplateTable::_breakpoint() {
+
+  transition(vtos, vtos);
+
+  Register rarg = LP64_ONLY(c_rarg1) NOT_LP64(rcx); // rarg = rdx on 64-bit
+
+  // get the unpatched byte code
+  __ get_method(rarg); // Returns the Method* which is located in the current java frame.
+  __ call_VM(noreg,
+             CAST_FROM_FN_PTR(address,
+                              InterpreterRuntime::get_original_bytecode_at),
+             rarg, rbcp); // Performs a stack alignment prior to the call
+  __ mov(rbx, rax);  // why?
+
+  // post the breakpoint event
+  __ get_method(rarg); // Gets the method again because rdx likely has not persisted
+  __ call_VM(noreg,
+             CAST_FROM_FN_PTR(address, InterpreterRuntime::_breakpoint),
+             rarg, rbcp); // Performs another stack alignment
+
+  // complete the execution of original bytecode
+  __ dispatch_only_normal(vtos); // Execute original bytecode
+}
 ```
 
 When using JVMTI to place a breakpoint, there are quite a few actions taken by the JVM, including storing the original bytecode and storing the callback function to be executed when the breakpoint is hit. This is all under the assumption that the JVM allows for agent attachment. However, if agent attachment is disabled, the JVM will refuse to run any exported breakpoint methods from the JVMTI.
@@ -152,7 +115,7 @@ vzeroupper                                |
 mov qword ptr ds:[r15+???],rbp            | Preserve java frame
 mov qword ptr ds:[r15+???],rax            | Preserve operand stack
 sub rsp,20                                |
-test esp,F                                |
+test esp,F                                | Check if alignment is required
 je no_align                               |
 sub rsp,8                                 |
 mov r10,<jvm.breakpoint_handler>          |
@@ -199,6 +162,15 @@ The execution flow of a breakpoint handler which modifies the operand stack can 
 
 ## Removing Breakpoints
 Removing breakpoints is easier than adding them. All you need to do is write the original bytecode back to the bytecode instruction pointer. Of course, you need to make sure that the original bytecode is still preserved, but that is a given.
+
+# Interpreter Interception
+The original name of this post was 'Interpreter Interception', but thankfully, I ran into the much better and more efficient breakpoint method before finishing this post. The method which the blog post was originally built for was centered around placing a hook on the last instruction which is executed by the interpreter entry, which of course executes the first instruction. During my research, I found a lot of online tools and products which simply place a detour on the `i2i_entry` of a Method. There are a lot of problems with this, and nearly none of the tools I found online accounted for these problems, so I consider it a miracle that they even worked.
+
+I opted to place my hook at the end of the entry due to the creation of the stack frame prior to the callback being executed. If you have access to the stack frame, then executing callbacks according to the method and the local variables passes becomes insanely easy. 
+
+Unfortunately I'm not going into too much detail on this method because I really do not think anyone should use it over breakpoints, but just know that it does exist! If you see any online sources just raw-dogging the i2i_entry field, please let them know that there is a better way!
+# Next Steps?
+Ideally someone with more time than me comes along and builds out a full runtime debugger using some of the methods mentioned in this blog post. Beyond general debugging, there are many useful things someone can implement if they have direct access to the method as soon as it is executed with this method. There are some really neat code protection applications that can be performed using this method of break-pointing and I am excited to see what people come up with.
 
 # Considerations
 Feel free to browse my code and build it to test around with it. 
