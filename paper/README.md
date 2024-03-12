@@ -169,6 +169,14 @@ The original name of this post was 'Interpreter Interception', but thankfully, I
 I opted to place my hook at the end of the entry due to the creation of the stack frame prior to the callback being executed. If you have access to the stack frame, then executing callbacks according to the method and the local variables passes becomes insanely easy. 
 
 Unfortunately I'm not going into too much detail on this method because I really do not think anyone should use it over breakpoints, but just know that it does exist! If you see any online sources just raw-dogging the i2i_entry field, please let them know that there is a better way!
+
+## Java Frame
+The Java Frame is essentially a series of fields and pointers which describe the current method being executed. The frame holds vital information such as the current bytecode pointer, the current method being executed, and a pointer to the previous frame used by the sender (The method which called this one).
+
+The frame pointer can always be obtained via the `rbp` register on a 64-bit machine. It should be known that the frame is essentially 'backwards', meaning that the frame is built similar to a stack, with all addresses of the fields being below the address of the frame. To better demonstrate this, I have included a diagram which displays how the frame is setup in memory
+
+<img src="https://i.imgur.com/PwEnZhX.png" alt="Java Frame" width="400"/>
+
 # Next Steps?
 Ideally someone with more time than me comes along and builds out a full runtime debugger using some of the methods mentioned in this blog post. Beyond general debugging, there are many useful things someone can implement if they have direct access to the method as soon as it is executed with this method. There are some really neat code protection applications that can be performed using this method of break-pointing and I am excited to see what people come up with.
 
