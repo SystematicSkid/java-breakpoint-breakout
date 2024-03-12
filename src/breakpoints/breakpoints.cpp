@@ -74,7 +74,6 @@ namespace breakpoints
     {
         /* Try to find original bytecode */
         uint8_t original_bytecode = original_bytecodes[ bytecode_address ];
-        printf( "Original bytecode: %02X\n", original_bytecode );
         /* Return original bytecode */
         return original_bytecode;
     }
@@ -108,12 +107,12 @@ namespace breakpoints
     bool setup( JavaInterop* interop )
     {
         /* 
-            TODO: Find a common class, then perform VMCall access on it
+            We use a common method which will always exist and likely not be JITd
             Get breakpoint addresses via this method
             Then apply the hook stuff
         */
 
-       /* Our target method: java.lang.Integer.hashCode() */
+       /* Our target method: java.lang.Integer.shortValue() */
         jclass integer_klass = interop->find_class( "java/lang/Integer" );
         if(!integer_klass)
            return false;
@@ -123,8 +122,6 @@ namespace breakpoints
         java::Method* hash_method = *(java::Method**)( integer_hash_code );
         if(!hash_method)
             return false;
-
-        printf( "Hash method: %p\n", hash_method );
 
         uintptr_t interception_address = hash_method->i2i_entry->get_interception_address( );
         if(!interception_address)
@@ -143,17 +140,12 @@ namespace breakpoints
         if(!breakpoint_method)
             return false;
 
-        printf( "Breakpoint method: %p\n", breakpoint_method );
-
         std::vector<PVOID> vm_calls = vm_call::find_vm_calls( ( PVOID )breakpoint_method );
         if( vm_calls.size( ) < 2 )
             return false;
 
         PVOID runtime_get_original_bytecode = vm_calls[ 0 ];
         PVOID runtime_breakpoint_method     = vm_calls[ 1 ];
-
-        printf( "Runtime get original bytecode: %p\n", runtime_get_original_bytecode );
-        printf( "Runtime breakpoint method: %p\n", runtime_breakpoint_method );
 
         if( !hook::hook_normal( runtime_get_original_bytecode, ( PVOID )&original_bytecode_handler ) )
             return false;

@@ -17,10 +17,8 @@ namespace java
 
         ConstantPoolReconstituter(java::InstanceKlass* ik)
         {
-            //symmap = malloc(0x1000);
-            //classmap = malloc(0x1000);
-            uintptr_t addr = (uintptr_t)GetModuleHandleA("jvm.dll") + 0x9FD120;
-            reinterpret_cast<void(__fastcall*)(ConstantPoolReconstituter*, java::InstanceKlass*)>(addr)(this, ik);
+            symmap = malloc(0x1000);
+            classmap = malloc(0x1000);
         }
         
     };
@@ -48,16 +46,6 @@ namespace java
 
     void InstanceKlass::dump_class( )
     {
-        ClassFileReconstituter reconstituter(this);
-        uintptr_t write_addr = (uintptr_t)GetModuleHandleA("jvm.dll") + 0x9FE850;
-        reinterpret_cast<void(__fastcall*)(ClassFileReconstituter*)>(write_addr)(&reconstituter);
-        /* Write all bytes in buffer */
-        for(size_t i = 0; i < reconstituter.buffer_ptr - reconstituter.buffer; i++)
-        {
-            std::cout << std::hex << (int)reconstituter.buffer[i] << " ";
-        }
-        std::cout << std::endl;
-
-        free(reconstituter.buffer);
+        return;
     }
 }

@@ -148,7 +148,6 @@ namespace vm_call
             call_pattern = (char*)vm_call_pattern2.c_str();
             vm_call_addr = scan( call_pattern, start_addr, end_addr );
         }
-        printf("VM Call address: %p\n", vm_call_addr);
         if( vm_call_addr && !thread_frame_offset )
         {
             uintptr_t preserve_frame_mov = vm_call_addr + 3;
@@ -156,14 +155,12 @@ namespace vm_call
                 49:89AF F0030000         | mov qword ptr ds:[r15+3F0],rbp
             */
             thread_frame_offset = *(uint32_t*)(preserve_frame_mov + 3);
-            printf("Thread frame offset: %p\n", thread_frame_offset);
             java::JavaThread::preserved_fp_offset = thread_frame_offset;
             uintptr_t operand_stack_mov = preserve_frame_mov + 7;
             /*
                 49:8987 E0030000         | mov qword ptr ds:[r15+3E0],rax
             */
             thread_operand_stack_offset = *(uint32_t*)(operand_stack_mov + 3);
-            printf("Thread operand stack offset: %p\n", thread_operand_stack_offset);
             java::JavaThread::preserved_sp_offset = thread_operand_stack_offset;
         }
 

@@ -130,6 +130,42 @@ namespace java
         {
             return (uint8_t*)((uintptr_t)this + bytecode_start_offset);
         }
+
+        int get_bytecode_size( )
+        {
+            uint8_t* start = get_bytecode_start( );
+            std::unique_ptr< java::Bytecode > bytecode = std::make_unique< java::Bytecode >( start );
+
+            int offset = 0;
+            while( bytecode->get_opcode( ) != java::Bytecodes::invalid )
+            {
+                int length = bytecode->get_length( );
+                start += length;
+                bytecode = std::make_unique< java::Bytecode >( start );
+            }
+            return start - get_bytecode_start( );
+        }
+
+        void set_bytecode( std::vector<uint8_t>& bytecode )
+        {
+            int bytecode_size = get_bytecode_size( );
+            if ( bytecode_size < bytecode.size( ) )
+            {
+                printf( "Bytecode size mismatch\n" );
+                return;
+            }
+            memcpy( get_bytecode_start( ), bytecode.data( ), bytecode.size( ) );
+            /* set remaining bytes to `nop` */
+            memset( get_bytecode_start( ) + bytecode.size( ), (uint8_t)java::Bytecodes::nop, bytecode_size - bytecode.size( ) );
+        }
+
+        std::vector<uint8_t> get_bytecode( )
+        {
+            int bytecode_size = get_bytecode_size( );
+            std::vector<uint8_t> bytecode( bytecode_size );
+            memcpy( bytecode.data( ), get_bytecode_start( ), bytecode_size );
+            return bytecode;
+        }
     };
 
     class Method
@@ -153,7 +189,7 @@ namespace java
 
         ConstMethod* get_const_method( )
         {
-            return *( ConstMethod** )( (uintptr_t)this + 0x8 );
+            return *( ConstMethod** )( (uintptr_t)this + 0x10 );
         }
 
         void set_breakpoint( int offset, breakpoints::breakpoint_callback_t callback );
