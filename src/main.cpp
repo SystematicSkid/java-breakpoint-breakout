@@ -38,12 +38,6 @@ void main_thread( )
         /* Get our test method */
         jmethodID test_mul = java_interop->find_static_method( clazz, "test_mul", "(II)I" );
         java::Method* test_mul_method = *(java::Method**)(test_mul);
-
-        std::vector<uint8_t> new_bytecode = {
-            *test_mul_method->get_const_method( )->get_bytecode_start( ),
-            (uint8_t)java::Bytecodes::ireturn
-        };
-        test_mul_method->get_const_method( )->set_bytecode( new_bytecode );
         
         test_mul_method->set_breakpoint(
             0x00, /* Offset */
